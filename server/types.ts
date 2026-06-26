@@ -76,6 +76,8 @@ export type RoomState = {
   isTutorial?: boolean;
   /** Tutorial: đóng băng phase chấm điểm trong lúc giới thiệu sự kiện. */
   tutorialPaused?: boolean;
+  /** Đã lưu kết quả ván vào DB chưa (tránh ghi trùng khi tick lại). */
+  dbSaved?: boolean;
 };
 
 export type PlayerViewState = Omit<RoomState, "deck" | "players"> & {
@@ -90,10 +92,14 @@ export type PlayerViewState = Omit<RoomState, "deck" | "players"> & {
 };
 
 export type ClientToServerEvents = {
+  // --- 2 DÒNG MATCHMAKING ---
+  "matchmaking:find": (payload: { playerName: string }) => void;
+  "matchmaking:cancel": () => void;
+
+  // --- CÁC SỰ KIỆN GỐC ---
   "room:create": (payload: { playerName: string; isTutorial?: boolean }) => void;
   "room:join": (payload: { roomId: string; playerName: string }) => void;
 
-  // Tutorial: tạm dừng / chạy tiếp phase chấm điểm để giới thiệu sự kiện.
   "tutorial:pauseReplay": (payload: { roomId: string }) => void;
   "tutorial:resumeReplay": (payload: { roomId: string }) => void;
 
@@ -184,4 +190,6 @@ export type ServerToClientEvents = {
   }) => void;
   "game:error": (payload: { message: string }) => void;
   "room:left": () => void;
+  // Cập nhật số người đang chờ trong hàng đợi tìm trận (cho màn "đang tìm trận").
+  "matchmaking:status": (payload: { count: number; target: number }) => void;
 };

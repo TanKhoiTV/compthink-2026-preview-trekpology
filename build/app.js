@@ -458,6 +458,99 @@ function getOnlineSelfHand() {
     var _a, _b;
     return (_b = (_a = getOnlineSelfState()) === null || _a === void 0 ? void 0 : _a.hand) !== null && _b !== void 0 ? _b : null;
 }
+function getOnlinePlayerHand(playerId) {
+    var _a, _b;
+    if (!playerId || !onlineClientState.roomState)
+        return null;
+    if (playerId === getOnlineSelfPlayerId()) {
+        return getOnlineSelfHand();
+    }
+    return (_b = (_a = getOnlinePlayer(playerId)) === null || _a === void 0 ? void 0 : _a.hand) !== null && _b !== void 0 ? _b : null;
+}
+function getOnlinePlayerDraftPool(playerId) {
+    var _a, _b, _c;
+    if (!playerId || !onlineClientState.roomState)
+        return [];
+    if (playerId === getOnlineSelfPlayerId()) {
+        return (_a = getOnlineSelfDraftPool()) !== null && _a !== void 0 ? _a : [];
+    }
+    return (_c = (_b = getOnlinePlayer(playerId)) === null || _b === void 0 ? void 0 : _b.draftPool) !== null && _c !== void 0 ? _c : [];
+}
+function getOnlinePlayerPickedDraftCards(playerId) {
+    var _a, _b, _c, _d;
+    if (!playerId || !onlineClientState.roomState)
+        return [];
+    if (playerId === getOnlineSelfPlayerId()) {
+        return (_b = (_a = getOnlineSelfState()) === null || _a === void 0 ? void 0 : _a.pickedDraftCards) !== null && _b !== void 0 ? _b : [];
+    }
+    return (_d = (_c = getOnlinePlayer(playerId)) === null || _c === void 0 ? void 0 : _c.pickedDraftCards) !== null && _d !== void 0 ? _d : [];
+}
+function getOnlinePlayerSelectedDraftCardId(playerId) {
+    var _a, _b, _c, _d;
+    if (!playerId || !onlineClientState.roomState)
+        return null;
+    if (playerId === getOnlineSelfPlayerId()) {
+        return (_b = (_a = getOnlineSelfState()) === null || _a === void 0 ? void 0 : _a.selectedDraftCardId) !== null && _b !== void 0 ? _b : null;
+    }
+    return (_d = (_c = getOnlinePlayer(playerId)) === null || _c === void 0 ? void 0 : _c.selectedDraftCardId) !== null && _d !== void 0 ? _d : null;
+}
+function isOnlinePlayerDraftPickConfirmed(playerId) {
+    var _a, _b;
+    if (!playerId || !onlineClientState.roomState)
+        return false;
+    if (playerId === getOnlineSelfPlayerId()) {
+        return ((_a = getOnlineSelfState()) === null || _a === void 0 ? void 0 : _a.draftPickConfirmed) === true;
+    }
+    return ((_b = getOnlinePlayer(playerId)) === null || _b === void 0 ? void 0 : _b.draftPickConfirmed) === true;
+}
+function getOnlinePlayerPendingPickedDraftCard(playerId) {
+    var _a;
+    const selectedDraftCardId = getOnlinePlayerSelectedDraftCardId(playerId);
+    if (!selectedDraftCardId)
+        return null;
+    return (_a = getOnlinePlayerDraftPool(playerId).find((card) => card.id === selectedDraftCardId)) !== null && _a !== void 0 ? _a : null;
+}
+function getSpectateDraftPoolCards() {
+    if (!isSpectatingOnlinePlayer() || !isDraftPhase)
+        return [];
+    const viewedPlayerId = getViewedPlayerId();
+    const selectedDraftCardId = getOnlinePlayerSelectedDraftCardId(viewedPlayerId);
+    return getOnlinePlayerDraftPool(viewedPlayerId).filter((card) => {
+        return card.id !== selectedDraftCardId;
+    });
+}
+function getSpectatePickedDraftCards() {
+    if (!isSpectatingOnlinePlayer() || !isDraftPhase)
+        return [];
+    const viewedPlayerId = getViewedPlayerId();
+    const pickedCards = [...getOnlinePlayerPickedDraftCards(viewedPlayerId)];
+    const pendingPickedCard = getOnlinePlayerPendingPickedDraftCard(viewedPlayerId);
+    if (pendingPickedCard && !pickedCards.some((card) => card.id === pendingPickedCard.id)) {
+        pickedCards.push(pendingPickedCard);
+    }
+    return pickedCards;
+}
+function getSpectateHandCards() {
+    var _a;
+    if (!isSpectatingOnlinePlayer())
+        return [];
+    const viewedPlayerId = getViewedPlayerId();
+    const handCards = (_a = getOnlinePlayerHand(viewedPlayerId)) !== null && _a !== void 0 ? _a : [];
+    if (isDraftPhase) {
+        const allDraftCards = [
+            ...getSpectateDraftPoolCards(),
+            ...getSpectatePickedDraftCards(),
+        ];
+        const seen = new Set();
+        return allDraftCards.filter((card) => {
+            if (seen.has(card.id))
+                return false;
+            seen.add(card.id);
+            return true;
+        });
+    }
+    return handCards;
+}
 function getOnlineSelectedDraftCardId() {
     var _a, _b;
     return (_b = (_a = getOnlineSelfState()) === null || _a === void 0 ? void 0 : _a.selectedDraftCardId) !== null && _b !== void 0 ? _b : null;
@@ -492,11 +585,98 @@ function getOnlinePlayer(playerId) {
         return null;
     return (_a = onlineClientState.roomState.players[playerId]) !== null && _a !== void 0 ? _a : null;
 }
+function getOnlineSelfPlayerId() {
+    var _a;
+    return (_a = onlineClientState.playerId) !== null && _a !== void 0 ? _a : currentPlayerId;
+}
+function getViewedPlayerId() {
+    if (!isOnlineRoomActive())
+        return currentPlayerId;
+    return spectatingPlayerId !== null && spectatingPlayerId !== void 0 ? spectatingPlayerId : getOnlineSelfPlayerId();
+}
+function getViewedOnlinePlayer() {
+    return getOnlinePlayer(getViewedPlayerId());
+}
+function isSpectatingOnlinePlayer() {
+    return isOnlineRoomActive() && getViewedPlayerId() !== getOnlineSelfPlayerId();
+}
+function resetSpectateView() {
+    spectatingPlayerId = null;
+    focusedHandCardId = null;
+    focusedBoardCard = null;
+    focusedBoardPosition = null;
+    selectedHandCardId = null;
+    draggedHandCardId = null;
+    suppressNextClick = false;
+}
+function syncSpectateTargetWithRoomState() {
+    if (!isOnlineRoomActive()) {
+        spectatingPlayerId = null;
+        return;
+    }
+    if (!spectatingPlayerId)
+        return;
+    const selfPlayerId = getOnlineSelfPlayerId();
+    const targetPlayer = getOnlinePlayer(spectatingPlayerId);
+    if (spectatingPlayerId === selfPlayerId || !targetPlayer || !targetPlayer.hasJoined) {
+        resetSpectateView();
+    }
+}
+function getSpectatableOnlinePlayerIds() {
+    if (!isOnlineRoomActive())
+        return [];
+    const selfPlayerId = getOnlineSelfPlayerId();
+    return playerIds.filter((playerId) => {
+        if (playerId === selfPlayerId)
+            return false;
+        const player = getOnlinePlayer(playerId);
+        return (player === null || player === void 0 ? void 0 : player.isConnected) === true || (player === null || player === void 0 ? void 0 : player.hasJoined) === true;
+    });
+}
+function setSpectateTarget(playerId) {
+    if (!playerId) {
+        resetSpectateView();
+        return;
+    }
+    const selfPlayerId = getOnlineSelfPlayerId();
+    const targetPlayer = getOnlinePlayer(playerId);
+    if (playerId === selfPlayerId || !targetPlayer || !targetPlayer.hasJoined) {
+        resetSpectateView();
+        return;
+    }
+    spectatingPlayerId = playerId;
+    focusedHandCardId = null;
+    focusedBoardCard = null;
+    focusedBoardPosition = null;
+    selectedHandCardId = null;
+    draggedHandCardId = null;
+    handPointerDragState = null;
+    suppressNextClick = false;
+    clearBoardDragHoverClass();
+    clearDeckDiscardHoverClass();
+}
+function cycleSpectateTarget(direction) {
+    if (!isOnlineRoomActive())
+        return;
+    const candidates = getSpectatableOnlinePlayerIds();
+    if (candidates.length === 0) {
+        resetSpectateView();
+        rerenderGameShell();
+        return;
+    }
+    const currentIndex = spectatingPlayerId ? candidates.indexOf(spectatingPlayerId) : -1;
+    const nextIndex = currentIndex === -1
+        ? direction > 0
+            ? 0
+            : candidates.length - 1
+        : (currentIndex + direction + candidates.length) % candidates.length;
+    setSpectateTarget(candidates[nextIndex]);
+    rerenderGameShell();
+}
 export function getDisplayPlayerName() {
-    var _a, _b;
-    const selfPlayerId = (_a = onlineClientState.playerId) !== null && _a !== void 0 ? _a : currentPlayerId;
-    const onlineSelf = getOnlinePlayer(selfPlayerId);
-    return (_b = onlineSelf === null || onlineSelf === void 0 ? void 0 : onlineSelf.name) !== null && _b !== void 0 ? _b : "Player";
+    var _a;
+    const viewedPlayer = getViewedOnlinePlayer();
+    return (_a = viewedPlayer === null || viewedPlayer === void 0 ? void 0 : viewedPlayer.name) !== null && _a !== void 0 ? _a : "Player";
 }
 function getCompactPhaseDayLabel() {
     return `${getCurrentPhaseLabel()} • ${getCurrentDayLabel()}`.toUpperCase();
@@ -739,8 +919,7 @@ function getOnlinePlayerBoard(playerId) {
     return (_b = (_a = getOnlinePlayer(playerId)) === null || _a === void 0 ? void 0 : _a.board) !== null && _b !== void 0 ? _b : null;
 }
 function getCurrentOnlinePlayerId() {
-    var _a;
-    return (_a = onlineClientState.playerId) !== null && _a !== void 0 ? _a : currentPlayerId;
+    return getViewedPlayerId();
 }
 function getOnlineScoreForPlayer(playerId) {
     var _a, _b;
@@ -749,8 +928,7 @@ function getOnlineScoreForPlayer(playerId) {
     return (_b = (_a = onlineClientState.roomState.players[playerId]) === null || _a === void 0 ? void 0 : _a.score) !== null && _b !== void 0 ? _b : null;
 }
 function getOnlineSelfScore() {
-    var _a;
-    return getOnlineScoreForPlayer((_a = onlineClientState.playerId) !== null && _a !== void 0 ? _a : currentPlayerId);
+    return getOnlineScoreForPlayer(getViewedPlayerId());
 }
 function getKnownOnlineCardById(cardId) {
     var _a, _b, _c, _d;
@@ -761,6 +939,14 @@ function getKnownOnlineCardById(cardId) {
         ...((_a = onlineSelf === null || onlineSelf === void 0 ? void 0 : onlineSelf.draftPool) !== null && _a !== void 0 ? _a : []),
         ...((_b = onlineSelf === null || onlineSelf === void 0 ? void 0 : onlineSelf.pickedDraftCards) !== null && _b !== void 0 ? _b : []),
         ...((_c = onlineSelf === null || onlineSelf === void 0 ? void 0 : onlineSelf.hand) !== null && _c !== void 0 ? _c : []),
+        ...playerIds.reduce((cards, playerId) => {
+            var _a, _b, _c;
+            const player = getOnlinePlayer(playerId);
+            cards.push(...((_a = player === null || player === void 0 ? void 0 : player.draftPool) !== null && _a !== void 0 ? _a : []));
+            cards.push(...((_b = player === null || player === void 0 ? void 0 : player.pickedDraftCards) !== null && _b !== void 0 ? _b : []));
+            cards.push(...((_c = player === null || player === void 0 ? void 0 : player.hand) !== null && _c !== void 0 ? _c : []));
+            return cards;
+        }, []),
         ...playerHand,
         ...initialDeck,
     ];
@@ -1035,6 +1221,8 @@ function getCurrentDayPlacedCards(dayIndex = currentDayIndex) {
 const initialDeck = createInitialDeck();
 const playerIds = ["p1", "p2", "p3", "p4"];
 export const currentPlayerId = "p1";
+let spectatingPlayerId = null;
+let isOnlineRoomMenuOpen = false;
 function createEmptyPlayerBoards() {
     return {
         p1: createEmptyBoardSlots(),
@@ -1413,17 +1601,18 @@ function getPlayersRight() {
     });
 }
 export function getRemainingResources() {
+    var _a;
     /*
       Online phải lấy trực tiếp coin/stamina từ server state.
       Trước đó hàm này vẫn tính STARTING - cost trên board nên discard ở server đã cộng tài nguyên
       nhưng UI orb không đổi.
     */
     if (isOnlineRoomActive()) {
-        const onlineSelf = getOnlineSelfPublicPlayer();
-        if (onlineSelf) {
+        const onlineResourcePlayer = (_a = getViewedOnlinePlayer()) !== null && _a !== void 0 ? _a : getOnlineSelfPublicPlayer();
+        if (onlineResourcePlayer) {
             return {
-                coin: onlineSelf.coin,
-                stamina: onlineSelf.stamina,
+                coin: onlineResourcePlayer.coin,
+                stamina: onlineResourcePlayer.stamina,
             };
         }
     }
@@ -1489,6 +1678,8 @@ function isBoardLockToken(card) {
 }
 function canPlaceOnBoardCell(rowIndex, colIndex) {
     var _a, _b;
+    if (isSpectatingOnlinePlayer())
+        return false;
     const cell = (_b = (_a = getBoardSlots()[rowIndex]) === null || _a === void 0 ? void 0 : _a[colIndex]) !== null && _b !== void 0 ? _b : null;
     return cell === null;
 }
@@ -1591,6 +1782,12 @@ function payLocalDebtToken(rowIndex, colIndex, card) {
     rerenderArena();
 }
 function payDebtToken(rowIndex, colIndex, card) {
+    if (isSpectatingOnlinePlayer()) {
+        focusedBoardCard = card;
+        focusedBoardPosition = { rowIndex, colIndex };
+        rerenderArena();
+        return;
+    }
     if (colIndex !== currentDayIndex) {
         focusedBoardCard = card;
         focusedBoardPosition = { rowIndex, colIndex };
@@ -1686,26 +1883,32 @@ function renderFramedCardFace(card, mode) {
   `;
 }
 function getHandCardById(id) {
-    var _a, _b, _c, _d, _e, _f, _g;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     if (!id)
         return null;
+    if (isSpectatingOnlinePlayer()) {
+        const spectateHandCard = (_a = getSpectateHandCards().find((card) => card.id === id)) !== null && _a !== void 0 ? _a : null;
+        if (spectateHandCard) {
+            return spectateHandCard;
+        }
+    }
     if (isOnlineRoomActive()) {
-        const onlineDraftCard = (_b = (_a = getOnlineSelfDraftPool()) === null || _a === void 0 ? void 0 : _a.find((card) => card.id === id)) !== null && _b !== void 0 ? _b : null;
+        const onlineDraftCard = (_c = (_b = getOnlineSelfDraftPool()) === null || _b === void 0 ? void 0 : _b.find((card) => card.id === id)) !== null && _c !== void 0 ? _c : null;
         if (onlineDraftCard) {
             return onlineDraftCard;
         }
-        const onlineHandCard = (_d = (_c = getOnlineSelfHand()) === null || _c === void 0 ? void 0 : _c.find((card) => card.id === id)) !== null && _d !== void 0 ? _d : null;
+        const onlineHandCard = (_e = (_d = getOnlineSelfHand()) === null || _d === void 0 ? void 0 : _d.find((card) => card.id === id)) !== null && _e !== void 0 ? _e : null;
         if (onlineHandCard) {
             return onlineHandCard;
         }
     }
     if (isDraftPhase) {
-        const draftCard = (_f = (_e = getCurrentDraftPlayer()) === null || _e === void 0 ? void 0 : _e.pool.find((card) => card.id === id)) !== null && _f !== void 0 ? _f : null;
+        const draftCard = (_g = (_f = getCurrentDraftPlayer()) === null || _f === void 0 ? void 0 : _f.pool.find((card) => card.id === id)) !== null && _g !== void 0 ? _g : null;
         if (draftCard) {
             return draftCard;
         }
     }
-    return (_g = playerHand.find((card) => card.id === id)) !== null && _g !== void 0 ? _g : null;
+    return (_h = playerHand.find((card) => card.id === id)) !== null && _h !== void 0 ? _h : null;
 }
 function getBoardCardByPosition(rowIndex, colIndex) {
     return getBoardCardByPositionFromSlots(getBoardSlots(), rowIndex, colIndex);
@@ -2025,7 +2228,7 @@ function renderFocusedCard(card) {
 
         ${renderFramedCardFace(card, "focused")}
 
-        ${focusedBoardPosition
+        ${focusedBoardPosition && !isSpectatingOnlinePlayer()
         ? `
               <button
                 class="focused-card__return-button"
@@ -2510,7 +2713,41 @@ function updateDraftTimerDisplayVisualOnly() {
 function isDraftTimerDanger() {
     return !isDraftPickTimerFrozen() && draftPickSecondsLeft <= 3;
 }
+function renderSpectateDraftCenterOverlay() {
+    if (!isDraftPhase)
+        return "";
+    const targetPlayer = getViewedOnlinePlayer();
+    const activePool = getSpectateDraftPoolCards();
+    const pickedCards = getSpectatePickedDraftCards();
+    if (activePool.length === 0 && pickedCards.length === 0) {
+        return "";
+    }
+    const topRow = activePool.slice(0, 4);
+    const bottomRow = activePool.slice(4);
+    const renderRow = (cards, startIndex) => {
+        return cards.map((card, idx) => {
+            const globalSlot = startIndex + idx + 1;
+            return `
+        <div class="draft-center-card-wrapper draft-center-card-wrapper--slot-${globalSlot} draft-center-card-wrapper--spectate-readonly" style="--draft-deal-delay: ${(globalSlot - 1) * DRAFT_CENTER_DEAL_STEP_MS}ms">
+          <div class="draft-center-card" data-spectate-draft-card-id="${card.id}" onclick="event.stopPropagation(); openSpectateHandCard('${card.id}')">
+            ${renderHandCard(card, startIndex + idx, true)}
+          </div>
+        </div>
+      `;
+        }).join("");
+    };
+    return `
+    <div class="draft-center-overlay draft-center-overlay--spectate-readonly">
+      <div class="draft-center-container draft-center-container--spectate">
+        ${topRow.length > 0 ? `<div class="draft-center-row" style="display: flex; flex-direction: row; gap: 12px; justify-content: center;">${renderRow(topRow, 0)}</div>` : ""}
+        ${bottomRow.length > 0 ? `<div class="draft-center-row" style="display: flex; flex-direction: row; gap: 12px; justify-content: center;">${renderRow(bottomRow, 4)}</div>` : ""}
+      </div>
+    </div>
+  `;
+}
 function renderDraftCenterOverlay() {
+    if (isSpectatingOnlinePlayer())
+        return "";
     if (!isDraftPhase)
         return "";
     if (!shouldShowDraftPickPool())
@@ -2576,6 +2813,8 @@ function renderDraftCenterOverlay() {
   `;
 }
 function renderDraftLeftoverReturnOverlay() {
+    if (isSpectatingOnlinePlayer())
+        return "";
     if (!shouldShowDraftLeftoverReturn())
         return "";
     const cards = getDraftLeftoverReturnCards();
@@ -2692,8 +2931,19 @@ function renderPlayer(player) {
     const displayPlayer = onlinePlayer
         ? Object.assign(Object.assign({}, player), { name: onlinePlayer.name, score: onlinePlayer.score, coin: onlinePlayer.coin, stamina: onlinePlayer.stamina, usedSlots: onlinePlayer.usedSlots }) : player;
     const connectionClass = (onlinePlayer === null || onlinePlayer === void 0 ? void 0 : onlinePlayer.isConnected) === false ? " side-player--offline" : "";
+    const isSelfOnlinePlayer = isOnlineRoomActive() && player.id === getOnlineSelfPlayerId();
+    const canSpectatePlayer = isOnlineRoomActive() && !isSelfOnlinePlayer && (onlinePlayer === null || onlinePlayer === void 0 ? void 0 : onlinePlayer.isConnected) === true;
+    const isViewingPlayer = isOnlineRoomActive() && spectatingPlayerId === player.id;
+    const spectateClass = canSpectatePlayer ? " side-player--spectatable" : "";
+    const viewingClass = isViewingPlayer ? " side-player--viewing" : "";
+    const clickHandler = canSpectatePlayer
+        ? ` onclick="event.stopPropagation(); spectatePlayerBoard('${displayPlayer.id}')"`
+        : "";
+    const spectateTitle = canSpectatePlayer
+        ? ` title="Bấm để xem sàn của ${displayPlayer.name}"`
+        : "";
     return `
-    <section class="side-player ${displayPlayer.active ? "side-player--active" : ""}${connectionClass}">
+    <section class="side-player ${displayPlayer.active ? "side-player--active" : ""}${connectionClass}${spectateClass}${viewingClass}"${clickHandler}${spectateTitle}>
       <div class="side-player__top">
         <div class="side-player__identity">
           <span class="rank">#${displayPlayer.rank}</span>
@@ -2716,6 +2966,17 @@ function renderPlayer(player) {
       <div class="opponent-board">
         ${renderSidePlayerBoard(displayPlayer.id)}
       </div>
+
+      ${canSpectatePlayer ? `
+        <button
+          type="button"
+          class="side-player__view-button"
+          onclick="event.stopPropagation(); spectatePlayerBoard('${displayPlayer.id}')"
+          title="Xem bàn của ${displayPlayer.name}"
+        >
+          Xem
+        </button>
+      ` : ""}
     </section>
   `;
 }
@@ -3709,6 +3970,8 @@ function getPlanningConfirmStatusLabel() {
     return "";
 }
 function confirmPlanningPick() {
+    if (isSpectatingOnlinePlayer())
+        return;
     if (!isOnlinePlanningPhase())
         return;
     if (isSelfPlanningConfirmed())
@@ -3807,7 +4070,11 @@ function ensureOnlineDraftDealAnimationStarted() {
         return;
     handElement.classList.add("deal-active");
 }
-function applyDraftReturnGatherVars(cards, gatherCenterX, gatherCenterY, deckInsertX, deckInsertY) {
+function applyDraftReturnGatherVars(cards, gatherCenterX, gatherCenterY, deckInsertX, deckInsertY, 
+// "overTop": arc vòng lên trên (pass/return về deck phía trên).
+// "directScoop": arc bám đường deck→cụm, bow nhẹ ra ngoài — dùng khi chia bài
+//   bay ra từ góc dưới-phải, không vòng lên đầu màn hình.
+arcStyle = "overTop") {
     cards.forEach((card, index) => {
         const cardRect = card.getBoundingClientRect();
         const cardCenterX = cardRect.left + cardRect.width * 0.5;
@@ -3818,9 +4085,19 @@ function applyDraftReturnGatherVars(cards, gatherCenterX, gatherCenterY, deckIns
         const deckX = deckInsertX - cardCenterX + stackOffset * 2;
         const deckY = deckInsertY - cardCenterY + stackOffset * 2;
         const arc1X = gatherX + (deckX - gatherX) * 0.34;
-        const arc1Y = Math.min(gatherY, deckY) - 150 - Math.abs(stackOffset) * 7;
         const arc2X = gatherX + (deckX - gatherX) * 0.72;
-        const arc2Y = Math.min(gatherY, deckY) - 185 - Math.abs(stackOffset) * 5;
+        let arc1Y;
+        let arc2Y;
+        if (arcStyle === "directScoop") {
+            // Bám theo đường thẳng deck→cụm, bow nhẹ ra ngoài (xuống dưới một chút)
+            // để cảm giác "trườn" lên từ góc dưới-phải, không nhảy vọt lên trên.
+            arc1Y = gatherY + (deckY - gatherY) * 0.34 + 26 + Math.abs(stackOffset) * 4;
+            arc2Y = gatherY + (deckY - gatherY) * 0.72 + 14 + Math.abs(stackOffset) * 3;
+        }
+        else {
+            arc1Y = Math.min(gatherY, deckY) - 150 - Math.abs(stackOffset) * 7;
+            arc2Y = Math.min(gatherY, deckY) - 185 - Math.abs(stackOffset) * 5;
+        }
         card.style.setProperty("--gather-x", `${gatherX}px`);
         card.style.setProperty("--gather-y", `${gatherY}px`);
         card.style.setProperty("--gather-r", `${stackOffset * 4}deg`);
@@ -4726,6 +5003,8 @@ function getCurrentCoinDebtAmount() {
     return Math.max(0, localCoinDebt);
 }
 function openDebtTokenModal() {
+    if (isSpectatingOnlinePlayer())
+        return;
     if (getCurrentCoinDebtAmount() <= 0)
         return;
     isDebtTokenModalOpen = true;
@@ -4738,6 +5017,8 @@ function closeDebtTokenModal() {
     rerenderGameShell();
 }
 function payCurrentCoinDebt() {
+    if (isSpectatingOnlinePlayer())
+        return;
     const debtAmount = getCurrentCoinDebtAmount();
     if (debtAmount <= 0) {
         closeDebtTokenModal();
@@ -4869,10 +5150,10 @@ function renderPlayerEffectTokens() {
     const coinDebt = getCurrentCoinDebtAmount();
     if (coinDebt > 0) {
         effectTokens.push(`
-      <button
-        type="button"
-        class="player-effect-seal player-effect-seal--debt"
-        onclick="event.stopPropagation(); window.openDebtTokenModal()"
+      <${isSpectatingOnlinePlayer() ? "div" : "button"}
+        ${isSpectatingOnlinePlayer() ? "" : 'type="button"'}
+        class="player-effect-seal player-effect-seal--debt ${isSpectatingOnlinePlayer() ? "player-effect-seal--readonly" : ""}"
+        ${isSpectatingOnlinePlayer() ? "" : 'onclick="event.stopPropagation(); window.openDebtTokenModal()"'}
         aria-label="Token nợ: ${coinDebt} xu"
       >
         <span class="player-effect-seal__surface">
@@ -4883,7 +5164,7 @@ function renderPlayerEffectTokens() {
 
         <span class="player-effect-seal__count">${coinDebt}</span>
         <span class="player-effect-seal__hover-label">TOKEN NỢ</span>
-      </button>
+      </${isSpectatingOnlinePlayer() ? "div" : "button"}>
     `);
     }
     if (!effectTokens.length) {
@@ -4895,8 +5176,14 @@ function renderPlayerEffectTokens() {
     </div>
   `;
 }
+function renderSpectateDeckPlaceholder() {
+    return "";
+}
 function renderDeckPilePanel() {
     var _a, _b, _c;
+    if (isSpectatingOnlinePlayer()) {
+        return renderSpectateDeckPlaceholder();
+    }
     const deckCount = isOnlineRoomActive() ? 0 : deck.length;
     const handCount = (_b = (_a = (isOnlineRoomActive() ? getOnlineSelfHand() : null)) === null || _a === void 0 ? void 0 : _a.length) !== null && _b !== void 0 ? _b : playerHand.length;
     const canConfirm = !!(draftHandPendingCardId || draftSelectedCardId) &&
@@ -5007,11 +5294,104 @@ function renderDeckPilePanel() {
     </section>
   `;
 }
+function renderSpectateBanner() {
+    return "";
+}
+function renderSpectateHandCard(card, index) {
+    return `
+    <article
+      class="spectate-card-tray__card hand-card hand-card--${card.rarity} hand-card--spectate-readonly"
+      data-spectate-hand-card-id="${card.id}"
+      title="${card.name} - ${card.city}"
+      onclick="event.stopPropagation(); openSpectateHandCard('${card.id}')"
+      style="--spectate-card-index: ${index};"
+    >
+      ${renderFramedCardFace(card, "hand")}
+    </article>
+  `;
+}
+function renderSpectateHandSection(title, label, cards, emptyText, className = "") {
+    return `
+    <div class="spectate-card-tray__section ${className}">
+      <div class="spectate-card-tray__section-title">
+        <span>${label}</span>
+        <strong>${title}</strong>
+        <em>${cards.length} lá</em>
+      </div>
+
+      <div class="spectate-card-tray__cards">
+        ${cards.length > 0 ? cards.map((card, index) => renderSpectateHandCard(card, index)).join("") : `<div class="spectate-hand-empty">${emptyText}</div>`}
+      </div>
+    </div>
+  `;
+}
+function renderSpectateHandPanel() {
+    var _a, _b;
+    const viewedPlayerId = getViewedPlayerId();
+    const targetPlayer = getViewedOnlinePlayer();
+    const viewedPlayerName = (_a = targetPlayer === null || targetPlayer === void 0 ? void 0 : targetPlayer.name) !== null && _a !== void 0 ? _a : "đối thủ";
+    const handCards = (_b = getOnlinePlayerHand(viewedPlayerId)) !== null && _b !== void 0 ? _b : [];
+    const pickedDraftCards = getSpectatePickedDraftCards();
+    const displayCards = isDraftPhase ? pickedDraftCards : handCards;
+    const displayCount = displayCards.length;
+    const emptyText = isDraftPhase
+        ? "Đối thủ chưa chọn lá nào trong vòng draft này."
+        : "Đối thủ chưa có bài trên tay.";
+    return `
+    <section
+      class="player-hand player-hand--spectate-normal ${isDraftPhase ? "player-hand--draft player-hand--spectate-draft" : ""}"
+      onclick="event.stopPropagation()"
+      aria-label="Bài của người chơi đang xem"
+    >
+      <div class="player-hand__top player-hand__top--spectate">
+        <div class="player-hand__title">
+          <span class="hand-badge">${isDraftPhase ? "PICK" : "HAND"}</span>
+          <h2>${isDraftPhase ? `Lá đã chọn của ${viewedPlayerName}` : `Bài trên tay của ${viewedPlayerName}`}</h2>
+        </div>
+
+        <button
+          type="button"
+          class="player-hand__return-button"
+          onclick="event.stopPropagation(); returnToOwnBoard()"
+          title="Quay về bàn của mình"
+        >
+          ← Bàn mình
+        </button>
+      </div>
+
+      <div class="player-hand__cards ${isDraftPhase ? `player-hand__cards--draft player-hand__cards--picked player-hand__cards--picked-count-${Math.max(1, displayCount)}` : ""}">
+        ${displayCount > 0
+        ? displayCards.map((card, index) => renderSpectateReadonlyHandCard(card, index)).join("")
+        : `<div class="spectate-normal-empty">${emptyText}</div>`}
+      </div>
+    </section>
+  `;
+}
+function renderSpectateReturnButton() {
+    return "";
+}
+function renderSpectateReadonlyHandCard(card, index) {
+    const pickedClass = isDraftPhase
+        ? ` hand-card--picked-draft hand-card--picked-slot-${index + 1}`
+        : ` hand-card--fan-${index + 1}`;
+    return `
+    <article
+      class="hand-card hand-card--${card.rarity} hand-card--spectate-readonly${pickedClass}"
+      data-spectate-hand-card-id="${card.id}"
+      title="${card.name} - ${card.city}"
+      onclick="event.stopPropagation(); openSpectateHandCard('${card.id}')"
+      style="--hand-card-index: ${index};"
+    >
+      ${renderFramedCardFace(card, "hand")}
+    </article>
+  `;
+}
 function renderMainArena() {
     var _a;
     const focusedCard = (_a = getHandCardById(focusedHandCardId)) !== null && _a !== void 0 ? _a : focusedBoardCard;
+    const isSpectating = isSpectatingOnlinePlayer();
     return `
-    <main class="arena ${isOnlineGameOver() ? "arena--gameover" : ""} ${isSimulationMode ? "arena--scanning" : ""}">
+    <main class="arena ${isOnlineGameOver() ? "arena--gameover" : ""} ${isSimulationMode ? "arena--scanning" : ""} ${isSpectating ? "arena--spectating" : ""}">
       <div class="arena__top arena__top--with-score">
         <div class="arena__title-block">
           <div class="blue-line"></div>
@@ -5024,6 +5404,7 @@ function renderMainArena() {
         ${renderScoreBreakdownPanel()}
       </div>
 
+      ${renderSpectateBanner()}
 
       ${renderResourceOrbs()}
 
@@ -5043,7 +5424,7 @@ function renderMainArena() {
             .map((_, colIndex) => {
             const card = getBoardCardByPosition(rowIndex, colIndex);
             const isCurrentDayColumn = colIndex === currentDayIndex;
-            const isPlaceable = !isDraftPhase && !isSimulationMode && !isInitialDealInProgress && isCurrentDayColumn && selectedHandCardId !== null && card === null;
+            const isPlaceable = !isSpectating && !isDraftPhase && !isSimulationMode && !isInitialDealInProgress && isCurrentDayColumn && selectedHandCardId !== null && card === null;
             if (!card) {
                 return `
                           <div
@@ -5078,14 +5459,17 @@ function renderMainArena() {
     })
         .join("")}
           </section>
-          ${renderDraftCenterOverlay()}${renderDraftLeftoverReturnOverlay()}
+          ${isSpectating && isDraftPhase ? renderSpectateDraftCenterOverlay() : renderDraftCenterOverlay()}${renderDraftLeftoverReturnOverlay()}
+          ${renderSpectateReturnButton()}
         </div>
 
         ${isOnlineGameOver() ? renderFinalRankingPanel() : isDraftPhase ? "" : renderSimulationResultPanel()}
 
         ${isSimulationMode
         ? ""
-        : `
+        : isSpectating
+            ? renderSpectateHandPanel()
+            : `
               <section
           class="player-hand ${isDraftPhase ? "player-hand--draft" : ""} ${!isDraftPhase && isInitialDealInProgress ? "player-hand--dealing is-dealing" : ""}"
           onclick="${isDraftPhase ? "" : "clearSelectedHandCard()"}"
@@ -5095,19 +5479,19 @@ function renderMainArena() {
               <span class="hand-badge">${isDraftPhase ? "DRAFT" : "HAND"}</span>
               <h2>
                 ${isDraftPhase
-            ? `Chọn bài ngày ${days[currentDayIndex]}`
-            : `Bài ngày ${days[currentDayIndex]}`}
+                ? `Chọn bài ngày ${days[currentDayIndex]}`
+                : `Bài ngày ${days[currentDayIndex]}`}
               </h2>
             </div>
 
             <div class="player-hand__meta ${isDraftPhase && isDraftTimerDanger() ? "player-hand__meta--danger" : ""}">
               ${isDraftPhase
-            ? isDraftPickTimerFrozen()
-                ? "Đang chia bài..."
-                : `Còn ${draftPickSecondsLeft}s • ${isPassingDraftCards ? "Đang chuyền bài..." : "bấm 1 lá để chọn"}`
-            : isInitialDealInProgress
-                ? "Đang chia bài..."
-                : "Giữ 0.5s để xem lớn"}
+                ? isDraftPickTimerFrozen()
+                    ? "Đang chia bài..."
+                    : `Còn ${draftPickSecondsLeft}s • ${isPassingDraftCards ? "Đang chuyền bài..." : "bấm 1 lá để chọn"}`
+                : isInitialDealInProgress
+                    ? "Đang chia bài..."
+                    : "Giữ 0.5s để xem lớn"}
             </div>
           </div>
 
@@ -5170,6 +5554,8 @@ function rerenderArena() {
     });
 }
 function placeHandCardOnBoard(cardId, rowIndex, colIndex) {
+    if (isSpectatingOnlinePlayer())
+        return;
     if (isSimulationMode || isInitialDealInProgress)
         return;
     if (colIndex !== currentDayIndex)
@@ -5265,6 +5651,8 @@ function placeSelectedHandCard(rowIndex, colIndex) {
 }
 function returnFocusedBoardCardToHand() {
     var _a;
+    if (isSpectatingOnlinePlayer())
+        return;
     if (isSimulationMode)
         return;
     if (!focusedBoardPosition)
@@ -5375,7 +5763,7 @@ function clearDeckDiscardHoverClass() {
     });
 }
 function canDiscardHandCard() {
-    return !isDraftPhase && !isSimulationMode && !isInitialDealInProgress;
+    return !isSpectatingOnlinePlayer() && !isDraftPhase && !isSimulationMode && !isInitialDealInProgress;
 }
 function discardHandCardToDeck(cardId) {
     if (!canDiscardHandCard())
@@ -5572,6 +5960,8 @@ function clearBoardDragHoverClass() {
 }
 window.startDragHandCard = (event, id) => {
     var _a;
+    if (isSpectatingOnlinePlayer())
+        return;
     clearHoldTimer();
     /*
       Không rerender ở dragstart.
@@ -5598,6 +5988,8 @@ window.endDragHandCard = () => {
     }, 0);
 };
 window.handleBoardCellDragOver = (event, rowIndex, colIndex) => {
+    if (isSpectatingOnlinePlayer())
+        return;
     if (!draggedHandCardId)
         return;
     if (getBoardSlots()[rowIndex][colIndex] !== null)
@@ -5613,6 +6005,8 @@ window.handleBoardCellDragLeave = (event) => {
     target === null || target === void 0 ? void 0 : target.classList.remove("board-cell--drag-hover");
 };
 window.dropHandCardOnBoard = (event, rowIndex, colIndex) => {
+    if (isSpectatingOnlinePlayer())
+        return;
     clearHoldTimer();
     clearBoardDragHoverClass();
     const cardId = getDraggedCardIdFromEvent(event);
@@ -5627,6 +6021,8 @@ window.dropHandCardOnBoard = (event, rowIndex, colIndex) => {
     placeHandCardOnBoard(cardId, rowIndex, colIndex);
 };
 window.startHandPointerDrag = (event, id) => {
+    if (isSpectatingOnlinePlayer())
+        return;
     if (isInitialDealInProgress)
         return;
     if (isSimulationMode)
@@ -5707,9 +6103,49 @@ window.clearSelectedHandCard = () => {
     selectedHandCardId = null;
     rerenderArena();
 };
+window.spectatePlayerBoard = (playerId) => {
+    if (!isOnlineRoomActive())
+        return;
+    setSpectateTarget(playerId);
+    rerenderGameShell();
+};
+window.cycleSpectatePlayer = (direction = 1) => {
+    cycleSpectateTarget(direction);
+};
+window.returnToOwnBoard = () => {
+    resetSpectateView();
+    rerenderGameShell();
+};
+window.openSpectateHandCard = (cardId) => {
+    if (!isSpectatingOnlinePlayer())
+        return;
+    const card = getSpectateHandCards().find((item) => item.id === cardId);
+    if (!card)
+        return;
+    clearHoldTimer();
+    focusedHandCardId = card.id;
+    focusedBoardCard = null;
+    focusedBoardPosition = null;
+    selectedHandCardId = null;
+    draggedHandCardId = null;
+    suppressNextClick = false;
+    rerenderArena();
+};
 window.handleBoardCellClick = (rowIndex, colIndex) => {
     clearHoldTimer();
     const card = getBoardCardByPosition(rowIndex, colIndex);
+    if (isSpectatingOnlinePlayer()) {
+        if (card) {
+            clearCustomHandDragVisuals();
+            focusedHandCardId = null;
+            focusedBoardCard = card;
+            focusedBoardPosition = { rowIndex, colIndex };
+            selectedHandCardId = null;
+            suppressNextClick = false;
+            rerenderArena();
+        }
+        return;
+    }
     if (card) {
         if (isBoardDebtToken(card)) {
             if (!isDraftPhase && !isInitialDealInProgress && colIndex === currentDayIndex && selectedHandCardId) {
@@ -5875,8 +6311,12 @@ function renderMidGameRankingModal() {
         ? rankings
             .map((player, index) => {
             const isSelf = player.playerId === selfPlayerId;
+            const canSpectateFromRank = !isSelf && player.hasJoined;
             return `
-                      <div class="mid-ranking-row ${isSelf ? "mid-ranking-row--self" : ""}">
+                      <div
+                        class="mid-ranking-row ${isSelf ? "mid-ranking-row--self" : ""} ${canSpectateFromRank ? "mid-ranking-row--spectatable" : ""}"
+                        ${canSpectateFromRank ? `onclick="event.stopPropagation(); closeMidGameRanking(); spectatePlayerBoard('${player.playerId}')" title="Xem sàn của ${player.name}"` : ""}
+                      >
                         <div class="mid-ranking-row__rank">#${index + 1}</div>
 
                         <div class="mid-ranking-row__player">
@@ -6071,31 +6511,65 @@ function setupInGameMusicDelegation() {
     document.addEventListener("pointerdown", tryPlay, { passive: true });
     document.addEventListener("keydown", tryPlay);
 }
+function setupSpectateKeyboardControls() {
+    document.addEventListener("keydown", (event) => {
+        var _a, _b;
+        if (!isOnlineRoomActive() || ((_a = onlineClientState.roomState) === null || _a === void 0 ? void 0 : _a.phase) === "lobby")
+            return;
+        if (event.altKey || event.ctrlKey || event.metaKey)
+            return;
+        const target = event.target;
+        const tagName = (_b = target === null || target === void 0 ? void 0 : target.tagName) === null || _b === void 0 ? void 0 : _b.toLowerCase();
+        if (tagName === "input" || tagName === "textarea" || (target === null || target === void 0 ? void 0 : target.isContentEditable))
+            return;
+        if (event.key === "e" || event.key === "E") {
+            event.preventDefault();
+            cycleSpectateTarget(1);
+            return;
+        }
+        if (event.key === "q" || event.key === "Q") {
+            event.preventDefault();
+            cycleSpectateTarget(-1);
+            return;
+        }
+        if (event.key === "Escape" && isSpectatingOnlinePlayer()) {
+            event.preventDefault();
+            resetSpectateView();
+            rerenderGameShell();
+        }
+    });
+}
 window.toggleInGameBackgroundMusic = toggleInGameBackgroundMusic;
 window.setInGameBackgroundMusicVolume = setInGameBackgroundMusicVolume;
+function toggleOnlineRoomMenu() {
+    isOnlineRoomMenuOpen = !isOnlineRoomMenuOpen;
+    rerenderGameShell();
+}
+function closeOnlineRoomMenu() {
+    if (!isOnlineRoomMenuOpen)
+        return;
+    isOnlineRoomMenuOpen = false;
+    rerenderGameShell();
+}
+window.toggleOnlineRoomMenu = toggleOnlineRoomMenu;
+window.closeOnlineRoomMenu = closeOnlineRoomMenu;
 function renderOnlineRoomMenu() {
-    var _a, _b;
+    var _a;
     if (!isOnlineRoomActive() || ((_a = onlineClientState.roomState) === null || _a === void 0 ? void 0 : _a.phase) === "lobby") {
         return "";
     }
     return `
-    <div class="online-room-menu" onclick="event.stopPropagation()">
-      <input id="online-room-menu-toggle" class="online-room-menu__toggle-input" type="checkbox" />
-
-      <label
+    <div class="online-room-menu ${isOnlineRoomMenuOpen ? "is-open" : ""}" onclick="event.stopPropagation()">
+      <button
+        type="button"
         class="online-room-menu__button"
-        for="online-room-menu-toggle"
         title="Mở menu phòng"
+        onclick="event.preventDefault(); event.stopPropagation(); toggleOnlineRoomMenu()"
       >
         ☰
-      </label>
+      </button>
 
       <div class="online-room-menu__panel">
-        <div class="online-room-menu__text">
-          <strong>Menu phòng</strong>
-          <span>Room ${(_b = onlineClientState.roomId) !== null && _b !== void 0 ? _b : "-"}</span>
-        </div>
-
         ${renderInGameMusicControl()}
 
         <button
@@ -6428,8 +6902,475 @@ function setupSaigonCollageHover() {
         delete shell.dataset.saigonHover;
     }
 }
+function renderSpectateRuntimeStyles() {
+    return `
+    <style id="spectate-runtime-styles">
+      .side-player--spectatable {
+        cursor: pointer;
+        transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+      }
+
+      .side-player--spectatable:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 18px 35px rgba(21, 173, 255, 0.22);
+      }
+
+      .side-player--viewing {
+        background: linear-gradient(180deg, rgba(11, 53, 115, 0.92), rgba(6, 31, 76, 0.88)) !important;
+        border-color: rgba(36, 132, 255, 0.96) !important;
+        box-shadow: 0 0 0 2px rgba(36, 132, 255, 0.42), 0 20px 42px rgba(6, 31, 76, 0.38) !important;
+        color: #f3fbff !important;
+      }
+
+      .side-player--viewing .side-player__identity h3,
+      .side-player--viewing .side-player__score,
+      .side-player--viewing .side-player__resources {
+        color: #f3fbff !important;
+      }
+
+      .side-player--viewing .rank {
+        background: #1d6dff !important;
+        color: #ffffff !important;
+      }
+
+      .mid-ranking-row--spectatable {
+        cursor: pointer;
+      }
+
+      .mid-ranking-row--spectatable:hover {
+        border-color: rgba(96, 211, 255, 0.55);
+        background: rgba(96, 211, 255, 0.10);
+      }
+
+      .player-effect-seal--readonly {
+        cursor: default;
+      }
+
+      .spectate-card-tray {
+        position: fixed;
+        left: 50%;
+        bottom: 14px;
+        transform: translateX(-50%);
+        width: min(980px, calc(100vw - 680px));
+        min-width: 520px;
+        z-index: 7200;
+        pointer-events: auto;
+        background: transparent;
+        border: 0;
+        box-shadow: none;
+        display: grid;
+        gap: 6px;
+      }
+
+      .spectate-card-tray__header {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+        pointer-events: auto;
+      }
+
+      .spectate-card-tray__header strong,
+      .spectate-card-tray__header button {
+        border: 1px solid rgba(147, 197, 253, 0.52);
+        background: rgba(12, 58, 126, 0.86);
+        color: #f5fbff;
+        border-radius: 999px;
+        box-shadow: 0 10px 26px rgba(9, 31, 70, 0.28);
+        font-weight: 900;
+        letter-spacing: 0.02em;
+      }
+
+      .spectate-card-tray__header strong {
+        padding: 7px 14px;
+      }
+
+      .spectate-card-tray__header button {
+        cursor: pointer;
+        padding: 7px 13px;
+      }
+
+      .spectate-card-tray__body {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        align-items: end;
+        pointer-events: auto;
+      }
+
+      .spectate-card-tray--hand .spectate-card-tray__body {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .spectate-card-tray__section {
+        display: grid;
+        gap: 4px;
+        min-width: 0;
+      }
+
+      .spectate-card-tray__section-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        color: #f5fbff;
+        text-shadow: 0 2px 8px rgba(6, 25, 58, 0.56);
+      }
+
+      .spectate-card-tray__section-title span {
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: rgba(37, 99, 235, 0.9);
+        border: 1px solid rgba(191, 219, 254, 0.58);
+        font-size: 0.68rem;
+        font-weight: 950;
+        flex: 0 0 auto;
+      }
+
+      .spectate-card-tray__section-title strong {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        font-size: 0.86rem;
+        font-weight: 950;
+      }
+
+      .spectate-card-tray__section-title em {
+        flex: 0 0 auto;
+        margin-left: auto;
+        font-style: normal;
+        font-size: 0.76rem;
+        opacity: 0.88;
+      }
+
+      .spectate-card-tray__cards {
+        --spectate-mini-card-w: 96px;
+        --spectate-mini-card-h: 142px;
+        min-height: calc(var(--spectate-mini-card-h) + 8px);
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        gap: 6px;
+        overflow-x: auto;
+        overflow-y: visible;
+        padding: 4px 6px 10px;
+        border-radius: 18px;
+        background: rgba(5, 23, 52, 0.18);
+        backdrop-filter: blur(2px);
+        scrollbar-width: thin;
+      }
+
+      .spectate-card-tray__card.hand-card {
+        width: var(--spectate-mini-card-w) !important;
+        height: var(--spectate-mini-card-h) !important;
+        flex: 0 0 var(--spectate-mini-card-w) !important;
+        margin-left: 0 !important;
+        transform: none !important;
+        transform-origin: center bottom !important;
+        cursor: zoom-in;
+        border-radius: 12px !important;
+        z-index: calc(7300 + var(--spectate-card-index, 0)) !important;
+      }
+
+      .spectate-card-tray__card.hand-card:hover {
+        transform: translateY(-18px) scale(1.18) !important;
+        z-index: 7800 !important;
+      }
+
+      .spectate-card-tray__card .framed-card-face__description,
+      .spectate-card-tray__card .framed-card-face__cost,
+      .spectate-card-tray__card .framed-card-face__pill--rarity {
+        display: none !important;
+      }
+
+      .spectate-card-tray__card .framed-card-face__name {
+        font-size: 0.52rem !important;
+      }
+
+      .spectate-hand-empty {
+        min-width: 180px;
+        min-height: 74px;
+        padding: 12px 14px;
+        display: grid;
+        place-items: center;
+        border: 1px dashed rgba(90, 221, 255, 0.35);
+        border-radius: 18px;
+        color: rgba(238, 251, 255, 0.88);
+        background: rgba(13, 33, 55, 0.38);
+        font-weight: 850;
+        text-align: center;
+        font-size: 0.8rem;
+      }
+
+      @media (max-width: 1500px) {
+        .spectate-card-tray {
+          width: min(820px, calc(100vw - 520px));
+          min-width: 430px;
+        }
+
+        .spectate-card-tray__cards {
+          --spectate-mini-card-w: 82px;
+          --spectate-mini-card-h: 122px;
+        }
+      }
+
+      @media (max-width: 1180px) {
+        .spectate-card-tray {
+          width: calc(100vw - 44px);
+          min-width: 0;
+          bottom: 8px;
+        }
+      }
+
+      .draft-center-overlay--spectate-readonly {
+        pointer-events: auto;
+      }
+
+      .draft-center-container--spectate {
+        gap: 12px;
+      }
+
+      .draft-center-card-wrapper--spectate-readonly {
+        cursor: pointer;
+      }
+
+      .draft-center-card-wrapper--spectate-readonly .draft-center-card {
+        filter: drop-shadow(0 18px 30px rgba(8, 34, 78, 0.28));
+      }
+
+      .spectate-draft-title {
+        align-self: center;
+        padding: 8px 16px;
+        border-radius: 999px;
+        background: rgba(6, 31, 76, 0.82);
+        border: 1px solid rgba(96, 184, 255, 0.38);
+        color: #f3fbff;
+        font-weight: 900;
+        letter-spacing: 0.04em;
+        box-shadow: 0 12px 28px rgba(6, 31, 76, 0.28);
+      }
+
+      .spectate-hand-empty {
+        min-width: 240px;
+        padding: 18px 20px;
+        border: 1px dashed rgba(90, 221, 255, 0.35);
+        border-radius: 18px;
+        color: rgba(238, 251, 255, 0.76);
+        background: rgba(13, 33, 55, 0.28);
+        font-weight: 800;
+        text-align: center;
+      }
+
+      .arena--spectating .board-cell {
+        cursor: zoom-in;
+      }
+
+      .arena--spectating .board-cell--empty {
+        cursor: default;
+      }
+
+
+
+
+
+
+      .spectate-return-button {
+        display: none !important;
+      }
+
+      .player-hand--spectate-normal {
+        pointer-events: auto;
+      }
+
+      .player-hand--spectate-normal .hand-card {
+        cursor: zoom-in !important;
+      }
+
+      .player-hand--spectate-normal .hand-card--spectate-readonly {
+        pointer-events: auto;
+      }
+
+      .player-hand--spectate-normal .hand-card--spectate-readonly:hover {
+        transform: translateY(-8px) scale(1.02);
+      }
+
+      .spectate-normal-empty {
+        min-width: 280px;
+        min-height: 86px;
+        display: grid;
+        place-items: center;
+        border: 2px dashed rgba(73, 145, 190, 0.42);
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.72);
+        color: #18455d;
+        font-weight: 800;
+        text-align: center;
+        padding: 14px 20px;
+      }
+
+      .draft-center-overlay--spectate-readonly {
+        pointer-events: none;
+      }
+
+      .draft-center-overlay--spectate-readonly .draft-center-card,
+      .draft-center-overlay--spectate-readonly .hand-card {
+        pointer-events: auto;
+        cursor: zoom-in !important;
+      }
+
+      .draft-center-overlay--spectate-readonly .draft-center-card:hover {
+        transform: translateY(-8px) scale(1.02);
+      }
+
+
+      .side-player__view-button {
+        width: calc(100% - 28px);
+        margin: 10px 14px 0;
+        border: 1px solid rgba(37, 99, 235, 0.32);
+        border-radius: 999px;
+        padding: 7px 12px;
+        background: rgba(255, 255, 255, 0.78);
+        color: #0b4477;
+        font-weight: 950;
+        letter-spacing: 0.04em;
+        cursor: pointer;
+        box-shadow: 0 8px 18px rgba(13, 48, 92, 0.12);
+      }
+
+      .side-player__view-button:hover {
+        background: #0d5fb8;
+        border-color: rgba(147, 197, 253, 0.78);
+        color: #ffffff;
+      }
+
+      .side-player--viewing .side-player__view-button {
+        background: rgba(219, 234, 254, 0.14);
+        border-color: rgba(191, 219, 254, 0.65);
+        color: #ffffff;
+      }
+
+      .online-room-menu.is-open .online-room-menu__panel {
+        width: 392px !important;
+        max-width: min(392px, calc(100vw - 86px)) !important;
+        opacity: 1 !important;
+        overflow: visible !important;
+        pointer-events: auto !important;
+        padding: 7px 8px 7px 12px !important;
+        transform: translateX(0) !important;
+        margin: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 7px !important;
+        flex-wrap: nowrap !important;
+      }
+
+      .online-room-menu__text {
+        display: none !important;
+      }
+
+      .online-room-menu__music {
+        flex: 0 0 198px !important;
+        width: 198px !important;
+        max-width: 198px !important;
+        min-width: 198px !important;
+      }
+
+      .online-room-menu__music-body {
+        min-width: 0 !important;
+      }
+
+      .online-room-menu__music-head span,
+      .online-room-menu__music-head strong,
+      .online-room-menu__export span,
+      .online-room-menu__export button,
+      .online-room-menu__ranking {
+        white-space: nowrap !important;
+      }
+
+      .online-room-menu__ranking {
+        flex: 0 0 auto !important;
+        min-width: 58px !important;
+      }
+
+      .online-room-menu__export {
+        flex: 0 0 auto !important;
+        min-width: 104px !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 5px !important;
+      }
+
+      .online-room-menu__export span {
+        display: none !important;
+      }
+
+      .online-room-menu__export button {
+        max-width: 104px !important;
+        padding-left: 12px !important;
+        padding-right: 12px !important;
+      }
+
+      .online-room-menu__leave {
+        flex: 0 0 44px !important;
+      }
+
+      @media (max-width: 720px) {
+        .online-room-menu.is-open .online-room-menu__panel {
+          width: calc(100vw - 72px) !important;
+          max-width: calc(100vw - 72px) !important;
+          gap: 8px !important;
+        }
+
+        .online-room-menu__music {
+          flex-basis: 172px !important;
+          width: 172px !important;
+          min-width: 172px !important;
+          max-width: 172px !important;
+        }
+      }
+
+      .online-room-menu__button {
+        border: 0;
+        appearance: none;
+      }
+
+      .player-hand__top--spectate {
+        align-items: center;
+        gap: 12px;
+      }
+
+      .player-hand__return-button {
+        margin-left: auto;
+        border: 0;
+        border-radius: 999px;
+        padding: 8px 16px;
+        background: linear-gradient(135deg, #144f91, #0d2e5e);
+        color: #ffffff;
+        font-weight: 950;
+        letter-spacing: 0.04em;
+        box-shadow: 0 10px 22px rgba(7, 24, 56, 0.26);
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .player-hand__return-button:hover {
+        filter: brightness(1.08);
+        transform: translateY(-1px);
+      }
+
+      .player-hand--spectate-normal .player-hand__cards--picked .hand-card--picked-draft {
+        cursor: zoom-in !important;
+      }
+
+      .player-hand--spectate-normal .player-hand__cards--picked .hand-card--picked-draft:hover {
+        z-index: 40 !important;
+      }
+
+    </style>
+  `;
+}
 function renderWithGlobalOverlays(content) {
-    return `${content}`;
+    return `${renderSpectateRuntimeStyles()}${content}`;
 }
 function renderGameShell() {
     var _a;
@@ -6437,6 +7378,7 @@ function renderGameShell() {
         return renderWithGlobalOverlays(renderDashboard(true));
     }
     if (!isOnlineRoomActive()) {
+        spectatingPlayerId = null;
         if (!authClientState.user || currentAppScreen === "dashboard") {
             currentAppScreen = "dashboard";
             return renderWithGlobalOverlays(renderDashboard());
@@ -6447,8 +7389,10 @@ function renderGameShell() {
         return renderWithGlobalOverlays(renderOnlineEntryScreen());
     }
     if (((_a = onlineClientState.roomState) === null || _a === void 0 ? void 0 : _a.phase) === "lobby") {
+        spectatingPlayerId = null;
         return renderWithGlobalOverlays(renderOnlineLobbyRoomScreen());
     }
+    syncSpectateTargetWithRoomState();
     const leftPlayers = getLeftSidePlayersToRender();
     const rightPlayers = getRightSidePlayersToRender();
     return renderWithGlobalOverlays(`
@@ -6596,29 +7540,71 @@ function restartDraftCenterDealVisuals() {
     const overlay = document.querySelector(".draft-center-overlay");
     if (!overlay)
         return false;
+    /* Reset so the expand keyframe can replay cleanly */
     overlay.classList.remove("draft-center-overlay--dealing");
-    const wrappers = overlay.querySelectorAll(".draft-center-card-wrapper");
-    wrappers.forEach((node) => {
-        const wrapper = node;
-        wrapper.classList.remove("draft-center-card-wrapper--flown-to-hand");
-        wrapper.style.animation = "none";
+    const wrappers = Array.from(overlay.querySelectorAll(".draft-center-card-wrapper"));
+    if (wrappers.length === 0)
+        return false;
+    wrappers.forEach((w) => {
+        w.classList.remove("draft-center-card-wrapper--flown-to-hand");
+        w.style.animation = "none";
+        // Clear old CSS vars
+        w.style.removeProperty("--gather-x");
+        w.style.removeProperty("--gather-y");
+        w.style.removeProperty("--gather-r");
+        w.style.removeProperty("--arc1-x");
+        w.style.removeProperty("--arc1-y");
+        w.style.removeProperty("--arc2-x");
+        w.style.removeProperty("--arc2-y");
+        w.style.removeProperty("--deck-in-x");
+        w.style.removeProperty("--deck-in-y");
+        w.style.removeProperty("--deck-r");
     });
+    // Force reflow
     void overlay.offsetWidth;
-    wrappers.forEach((node) => {
-        node.style.removeProperty("animation");
+    // Remove animation: none so keyframe can replay
+    wrappers.forEach((w) => {
+        w.style.removeProperty("animation");
     });
+    /* Calculate gather point at center of overlay, like collapse/expand does */
+    const overlayRect = overlay.getBoundingClientRect();
+    const gatherCenterX = overlayRect.left + overlayRect.width * 0.5;
+    const gatherCenterY = overlayRect.top + overlayRect.height * 0.38;
+    /* Gốc deck cho lúc CHIA BÀI: luôn bay ra từ góc dưới-phải màn hình.
+       (.deck-card-stack canh giữa nên không dùng — đó là lý do trước đây bay từ trên.) */
+    const deckInsertX = window.innerWidth - 70;
+    const deckInsertY = window.innerHeight - 50;
+    /* Set --gather-x/y/r và --deck-in-x/y/r per-card. Dùng arc "directScoop"
+       để các lá trườn lên từ góc dưới-phải về cụm, không vòng lên đầu màn hình. */
+    applyDraftReturnGatherVars(wrappers, gatherCenterX, gatherCenterY, deckInsertX, deckInsertY, "directScoop");
+    /* Re-add dealing class → CSS triggers draftCenterPoolExpandFromDeckV2 keyframe */
     overlay.classList.add("draft-center-overlay--dealing");
     return true;
 }
 function clearDraftCenterDealAnimation() {
-    var _a;
     draftCenterDealGeneration += 1;
     if (draftCenterDealEndTimerId !== null) {
         window.clearTimeout(draftCenterDealEndTimerId);
         draftCenterDealEndTimerId = null;
     }
     isDraftCenterDealing = false;
-    (_a = document.querySelector(".draft-center-overlay")) === null || _a === void 0 ? void 0 : _a.classList.remove("draft-center-overlay--dealing");
+    const overlay = document.querySelector(".draft-center-overlay");
+    overlay === null || overlay === void 0 ? void 0 : overlay.classList.remove("draft-center-overlay--dealing");
+    // Clean up gather CSS vars
+    overlay === null || overlay === void 0 ? void 0 : overlay.querySelectorAll(".draft-center-card-wrapper").forEach((node) => {
+        const el = node;
+        el.style.removeProperty("animation");
+        el.style.removeProperty("--gather-x");
+        el.style.removeProperty("--gather-y");
+        el.style.removeProperty("--gather-r");
+        el.style.removeProperty("--arc1-x");
+        el.style.removeProperty("--arc1-y");
+        el.style.removeProperty("--arc2-x");
+        el.style.removeProperty("--arc2-y");
+        el.style.removeProperty("--deck-in-x");
+        el.style.removeProperty("--deck-in-y");
+        el.style.removeProperty("--deck-r");
+    });
 }
 function getDraftCenterPoolSignature() {
     var _a, _b, _c, _d;
@@ -6645,12 +7631,16 @@ function startDraftCenterDealAnimation(durationMs = getDraftCenterDealDurationFo
         window.requestAnimationFrame(activate);
     });
     draftCenterDealEndTimerId = window.setTimeout(() => {
-        var _a;
         if (generation !== draftCenterDealGeneration)
             return;
         draftCenterDealEndTimerId = null;
         isDraftCenterDealing = false;
-        (_a = document.querySelector(".draft-center-overlay")) === null || _a === void 0 ? void 0 : _a.classList.remove("draft-center-overlay--dealing");
+        const ov = document.querySelector(".draft-center-overlay");
+        ov === null || ov === void 0 ? void 0 : ov.classList.remove("draft-center-overlay--dealing");
+        // Clean up FLIP inline styles
+        ov === null || ov === void 0 ? void 0 : ov.querySelectorAll(".draft-center-card-wrapper").forEach((node) => {
+            node.style.cssText = "";
+        });
     }, durationMs);
 }
 function clearOnlineDraftAnimationTimer() {
@@ -6910,6 +7900,7 @@ setupCardClickDelegation();
 setupAuthFormDelegation();
 setupGameAudioDelegation();
 setupInGameMusicDelegation();
+setupSpectateKeyboardControls();
 initTourLauncher(buildOnboardingCtx);
 initOnlineClient(() => {
     applyOnlineRoomStateToLocal();

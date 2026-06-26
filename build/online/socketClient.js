@@ -78,7 +78,7 @@ export function logoutAccount() {
     localStorage.removeItem(AUTH_STORAGE_KEY);
     clearSavedOnlineSession();
 }
-const socket = io("https://khoinguyentran-trekkopoly-old-server.hf.space");
+export const socket = io("https://khoinguyentran-trekkopoly-old-server.hf.space");
 const ONLINE_SESSION_STORAGE_KEY = "travel_board_online_session";
 export const onlineClientState = {
     roomId: null,

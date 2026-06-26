@@ -1,3 +1,4 @@
+import "dotenv/config";
 import http from "node:http";
 import { Server } from "socket.io";
 import type {
@@ -6,6 +7,8 @@ import type {
   RoomState,
   ServerToClientEvents,
 } from "./types.js";
+import { handleAuthHttpRequest } from "./auth.js";
+import { initDb } from "./db.js";
 import { confirmDraftPick, selectDraftCard } from "./draftEngine.js";
 import { getPlayerViewState } from "./gameEngine.js";
 import {
@@ -24,7 +27,13 @@ import {
 import { tickRoom } from "./timerEngine.js";
 import { driveBots, fillRoomWithBots } from "./bot.js";
 
-const httpServer = http.createServer();
+// Phục vụ REST /auth/* (đăng ký/đăng nhập backed bằng Postgres).
+// Socket.IO tự xử lý path /socket.io/ và uỷ quyền request khác cho handler này.
+const httpServer = http.createServer(async (req, res) => {
+  if (await handleAuthHttpRequest(req, res)) return;
+  res.writeHead(200, { "Content-Type": "text/plain" });
+  res.end("TREKPOLOGY server OK");
+});
 
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
   cors: {
@@ -35,6 +44,8 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
 const rooms = new Map<string, RoomState>();
 const socketPlayerIds = new Map<string, PlayerId>();
 const socketRoomIds = new Map<string, string>();
+
+const matchmakingQueue: { socketId: string; playerName: string }[] = [];
 
 function bindSocketPlayer(
   socket: { id: string; join: (room: string) => void },
@@ -75,6 +86,81 @@ function emitRoomState(roomId: string) {
   }
 }
 
+// =========================================================
+// MATCHMAKING: mở trận từ nhóm đang chờ + đổ bot cho đủ 4
+// =========================================================
+const MATCHMAKING_FILL_TIMEOUT_MS = 30000;
+let matchmakingTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearMatchmakingTimer() {
+  if (matchmakingTimer) {
+    clearTimeout(matchmakingTimer);
+    matchmakingTimer = null;
+  }
+}
+
+// Báo số lữ khách đang chờ cho từng người trong hàng đợi (màn "đang tìm trận").
+function broadcastMatchmakingStatus() {
+  const count = matchmakingQueue.length;
+  for (const p of matchmakingQueue) {
+    io.sockets.sockets.get(p.socketId)?.emit("matchmaking:status", { count, target: 4 });
+  }
+}
+
+// Hết giờ chờ mà chưa đủ 4 người thật → mở trận với số người đang có + bot.
+function scheduleMatchmakingTimer() {
+  if (matchmakingTimer) return; // đã có hẹn giờ đang chạy
+  matchmakingTimer = setTimeout(() => {
+    matchmakingTimer = null;
+    if (matchmakingQueue.length === 0) return;
+    const group = matchmakingQueue.splice(0, Math.min(4, matchmakingQueue.length));
+    launchMatchmakingGame(group);
+    broadcastMatchmakingStatus();
+    if (matchmakingQueue.length > 0) scheduleMatchmakingTimer(); // còn người chờ → hẹn tiếp
+  }, MATCHMAKING_FILL_TIMEOUT_MS);
+}
+
+// Tạo phòng từ nhóm người thật (1–4), điền bot cho đủ ghế, rồi sút vào cinematic.
+function launchMatchmakingGame(group: { socketId: string; playerName: string }[]) {
+  if (group.length === 0) return;
+
+  const host = group[0];
+  const { roomId, playerId: hostPlayerId, state } = createRoom(host.playerName);
+  rooms.set(roomId, state);
+
+  const hostSocket = io.sockets.sockets.get(host.socketId);
+  if (hostSocket) {
+    socketPlayerIds.set(host.socketId, hostPlayerId);
+    socketRoomIds.set(host.socketId, roomId);
+    hostSocket.join(roomId);
+    hostSocket.emit("room:joined", { roomId, playerId: hostPlayerId, state: getPlayerViewState(state, hostPlayerId) });
+  }
+
+  for (let i = 1; i < group.length && i < 4; i++) {
+    const member = group[i];
+    const memberSocket = io.sockets.sockets.get(member.socketId);
+    const memberPlayerId = joinRoom(state, member.playerName);
+    if (memberSocket && memberPlayerId) {
+      socketPlayerIds.set(member.socketId, memberPlayerId);
+      socketRoomIds.set(member.socketId, roomId);
+      memberSocket.join(roomId);
+      memberSocket.emit("room:joined", { roomId, playerId: memberPlayerId, state: getPlayerViewState(state, memberPlayerId) });
+    }
+  }
+
+  // Điền ghế trống bằng bot cho đủ 4 (khi chưa đủ người thật).
+  fillRoomWithBots(state);
+
+  const allPlayerIds: PlayerId[] = ["p1", "p2", "p3", "p4"];
+  allPlayerIds.forEach((pid) => {
+    if (state.players[pid]) state.players[pid].isReady = true;
+  });
+  state.phase = "cinematic";
+  state.timer = 7; // đếm ngược chuyển cảnh
+
+  emitRoomState(roomId);
+}
+
 setInterval(() => {
   for (const [roomId, state] of rooms) {
     tickRoom(state);
@@ -103,6 +189,39 @@ io.on("connection", (socket) => {
     });
     emitRoomState(roomId);
   });
+
+// =========================================================
+  // MATCHMAKING: TÌM TRẬN TỰ ĐỘNG (BẾ 4 NGƯỜI VÀO GAME)
+  // =========================================================
+  socket.on("matchmaking:find", ({ playerName }) => {
+    // 1. Nhét vào hàng đợi (nếu chưa có)
+    const isAlreadyInQueue = matchmakingQueue.some(p => p.socketId === socket.id);
+    if (!isAlreadyInQueue) {
+      matchmakingQueue.push({ socketId: socket.id, playerName: playerName || "Lữ Khách" });
+    }
+
+    // 2. Đủ 4 người thật → mở trận ngay. Chưa đủ → bật đồng hồ chờ;
+    //    hết 12s sẽ mở trận với số người đang có + bot cho đủ 4.
+    if (matchmakingQueue.length >= 4) {
+      clearMatchmakingTimer();
+      const group = matchmakingQueue.splice(0, 4);
+      launchMatchmakingGame(group);
+    } else {
+      scheduleMatchmakingTimer();
+    }
+    broadcastMatchmakingStatus();
+  });
+
+  // Hủy tìm trận (Thoát hàng đợi)
+  socket.on("matchmaking:cancel", () => {
+    const index = matchmakingQueue.findIndex(p => p.socketId === socket.id);
+    if (index !== -1) {
+      matchmakingQueue.splice(index, 1);
+    }
+    if (matchmakingQueue.length === 0) clearMatchmakingTimer();
+    broadcastMatchmakingStatus();
+  });
+  // =========================================================
 
   socket.on("tutorial:pauseReplay", ({ roomId }) => {
     const state = rooms.get(roomId);
@@ -364,6 +483,12 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
+    const queueIndex = matchmakingQueue.findIndex(p => p.socketId === socket.id);
+    if (queueIndex !== -1) {
+      matchmakingQueue.splice(queueIndex, 1);
+    }
+    if (matchmakingQueue.length === 0) clearMatchmakingTimer();
+    if (queueIndex !== -1) broadcastMatchmakingStatus();
     const playerId = socketPlayerIds.get(socket.id);
     const roomId = socketRoomIds.get(socket.id);
     const state = roomId ? rooms.get(roomId) : null;
@@ -382,6 +507,9 @@ io.on("connection", (socket) => {
 
 const PORT = Number(process.env.PORT ?? 3001);
 
-httpServer.listen(PORT, () => {
-  console.log(`Socket server listening on http://localhost:${PORT}`);
+// Tạo bảng (no-op nếu chưa cấu hình DATABASE_URL) rồi mới mở cổng.
+initDb().finally(() => {
+  httpServer.listen(PORT, () => {
+    console.log(`Socket server listening on http://localhost:${PORT}`);
+  });
 });

@@ -48,7 +48,13 @@ export type PlayerPublicState = {
   isConnected: boolean;
   isReady: boolean;
   hasJoined: boolean;
+  isBot?: boolean;
   planningConfirmed?: boolean;
+  draftPool?: OnlineTravelCardData[];
+  hand?: OnlineTravelCardData[];
+  pickedDraftCards?: OnlineTravelCardData[];
+  selectedDraftCardId?: string | null;
+  draftPickConfirmed?: boolean;
   board: PublicBoardCell[][];
 };
 
@@ -185,7 +191,7 @@ export function logoutAccount() {
   clearSavedOnlineSession();
 }
 
-const socket = io("http://localhost:3001");
+export const socket = io("http://localhost:3001");
 const ONLINE_SESSION_STORAGE_KEY = "travel_board_online_session";
 
 export const onlineClientState: OnlineClientState = {
