@@ -165,13 +165,14 @@ export function initOnlineClient(onStateChange, onGameError) {
         onStateChange();
     });
 }
-export function createOnlineRoom(playerName, isTutorial) {
+export function createOnlineRoom(playerName, isTutorial, city = "SAIGON") {
     if (!socket.connected) {
         socket.connect();
     }
     socket.emit("room:create", {
         playerName,
         isTutorial: isTutorial === true,
+        city,
     });
 }
 export function joinOnlineRoom(roomId, playerName) {

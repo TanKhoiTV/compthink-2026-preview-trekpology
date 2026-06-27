@@ -6699,12 +6699,13 @@ window.gotoMapSelection = () => {
         enterMapSelection(vid.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA);
     }, 6000);
 };
-window.gotoOnlineLobby = () => {
+window.gotoOnlineLobby = (city = "SAIGON") => {
     if (!authClientState.user) {
         window.focusHubAuthPanel();
         setAuthStatus("Đăng nhập hoặc đăng ký để bắt đầu hành trình.");
         return;
     }
+    window._selectedCity = city;
     transitionToScreen("lobby");
 };
 window.gotoDashboard = () => {
@@ -6896,11 +6897,13 @@ function isInsideOpaqueSaigonPixel(hotspot, bgX, bgY) {
     return alpha > 28;
 }
 function setupSaigonCollageHover() {
-    // Background hover/glow đã tắt. Chỉ giữ một background tĩnh.
+    var _a, _b;
     const shell = document.querySelector(".game-shell");
-    if (shell) {
-        delete shell.dataset.saigonHover;
-    }
+    if (!shell)
+        return;
+    delete shell.dataset.saigonHover;
+    // Nền bàn cờ đổi theo thành phố (data-phase-pool đã set ở template, đảm bảo lại ở đây).
+    shell.dataset.phasePool = (_b = (_a = onlineClientState.roomState) === null || _a === void 0 ? void 0 : _a.phasePool) !== null && _b !== void 0 ? _b : "SAIGON";
 }
 function renderSpectateRuntimeStyles() {
     return `
@@ -7373,7 +7376,7 @@ function renderWithGlobalOverlays(content) {
     return `${renderSpectateRuntimeStyles()}${content}`;
 }
 function renderGameShell() {
-    var _a;
+    var _a, _b, _c;
     if (!authClientState.isReady) {
         return renderWithGlobalOverlays(renderDashboard(true));
     }
@@ -7395,8 +7398,9 @@ function renderGameShell() {
     syncSpectateTargetWithRoomState();
     const leftPlayers = getLeftSidePlayersToRender();
     const rightPlayers = getRightSidePlayersToRender();
+    const boardPool = (_c = (_b = onlineClientState.roomState) === null || _b === void 0 ? void 0 : _b.phasePool) !== null && _c !== void 0 ? _c : "SAIGON";
     return renderWithGlobalOverlays(`
-    <div class="game-shell">
+    <div class="game-shell" data-phase-pool="${boardPool}">
       ${renderSaigonCollageBackground()}
       ${renderOnlineRoomMenu()}
       ${renderMidGameRankingModal()}
@@ -8003,7 +8007,8 @@ window.createRoomFromLobby = () => {
     stopOutsideBackgroundMedia();
     const input = document.querySelector("#lobby-create-name");
     const playerName = (input === null || input === void 0 ? void 0 : input.value.trim()) || ((_a = authClientState.user) === null || _a === void 0 ? void 0 : _a.displayName) || ((_b = authClientState.user) === null || _b === void 0 ? void 0 : _b.username) || "An";
-    createOnlineRoom(playerName, isOnboardingActive());
+    const city = window._selectedCity || "SAIGON";
+    createOnlineRoom(playerName, isOnboardingActive(), city);
 };
 window.joinRoomFromLobby = () => {
     stopOutsideBackgroundMedia();

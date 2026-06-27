@@ -42,28 +42,36 @@ export function renderMapSelectionScreen() {
           `)}
 
           ${renderMapCardWrapper(`
-            <div class="map-card map-card--locked">
+            <div class="map-card map-card--active">
               <div class="map-card__bg" style="background-image: url('./assets/danang.jpg')"></div>
               <div class="map-card__overlay"></div>
               <div class="map-card__content">
-                <span class="map-card__badge map-card__badge--locked">Sắp ra mắt</span>
+                <span class="map-card__badge">Đã Mở Khoá</span>
                 <div class="map-card__info">
                   <h3 class="map-card__title">ĐÀ NẴNG</h3>
                   <p class="map-card__desc">Thành phố đáng sống với những cây cầu độc đáo và bờ biển quyến rũ.</p>
+                </div>
+                <div class="map-card__actions">
+                  <button class="map-card__btn map-card__btn--primary" onclick="window.startMatchmaking(this, 'DANANG')">Tìm Trận</button>
+                  <button class="map-card__btn map-card__btn--secondary" onclick="window.gotoOnlineLobby('DANANG')">Tạo Phòng</button>
                 </div>
               </div>
             </div>
           `)}
 
           ${renderMapCardWrapper(`
-            <div class="map-card map-card--locked">
+            <div class="map-card map-card--active">
               <div class="map-card__bg" style="background-image: url('./assets/hanoi.jpeg')"></div>
               <div class="map-card__overlay"></div>
               <div class="map-card__content">
-                <span class="map-card__badge map-card__badge--locked">Sắp ra mắt</span>
+                <span class="map-card__badge">Đã Mở Khoá</span>
                 <div class="map-card__info">
                   <h3 class="map-card__title">HÀ NỘI</h3>
                   <p class="map-card__desc">Thủ đô ngàn năm văn hiến, phố cổ thâm trầm và những gánh hàng hoa.</p>
+                </div>
+                <div class="map-card__actions">
+                  <button class="map-card__btn map-card__btn--primary" onclick="window.startMatchmaking(this, 'HANOI')">Tìm Trận</button>
+                  <button class="map-card__btn map-card__btn--secondary" onclick="window.gotoOnlineLobby('HANOI')">Tạo Phòng</button>
                 </div>
               </div>
             </div>
@@ -112,7 +120,7 @@ function buildMatchmakingOverlay() {
     <div class="mm-panel">
       <div class="mm-panel__kicker"><i class="mm-radar"></i>CHUYẾN BAY ĐANG MỞ CỬA</div>
       <h1 class="mm-panel__title" id="mm-title">Đang tìm <span>bạn đồng hành</span><i class="mm-dots"><b>.</b><b>.</b><b>.</b></i></h1>
-      <p class="mm-panel__sub" id="mm-sub">Đang kết nối những lữ khách cùng chuyến đến Sài Gòn</p>
+      <p class="mm-panel__sub" id="mm-sub">Đang kết nối những lữ khách cùng chuyến...</p>
 
       <div class="mm-seats" id="mm-seats">${seats}</div>
 
@@ -180,7 +188,13 @@ function playMatchmakingTakeoff() {
     window.setTimeout(() => el.classList.add("mm-overlay--takeoff"), 700);
     window.setTimeout(() => hideMatchmakingOverlay(), 1700);
 }
-window.startMatchmaking = function () {
+const CITY_LABELS = {
+    SAIGON: "Sài Gòn",
+    DANANG: "Đà Nẵng",
+    HANOI: "Hà Nội",
+};
+window.startMatchmaking = function (_btn, city = "SAIGON") {
+    var _a;
     if (isSearchingMatch) {
         window.cancelMatchmaking();
         return;
@@ -188,8 +202,12 @@ window.startMatchmaking = function () {
     const user = authClientState.user;
     const playerName = (user === null || user === void 0 ? void 0 : user.displayName) || (user === null || user === void 0 ? void 0 : user.username) || "Lữ Khách";
     isSearchingMatch = true;
-    socket.emit("matchmaking:find", { playerName });
+    socket.emit("matchmaking:find", { playerName, city });
     showMatchmakingOverlay();
+    // Cập nhật text sub theo thành phố đã chọn
+    const sub = document.getElementById("mm-sub");
+    if (sub)
+        sub.textContent = `Đang kết nối những lữ khách cùng chuyến đến ${(_a = CITY_LABELS[city]) !== null && _a !== void 0 ? _a : city}`;
 };
 window.cancelMatchmaking = function () {
     if (!isSearchingMatch)

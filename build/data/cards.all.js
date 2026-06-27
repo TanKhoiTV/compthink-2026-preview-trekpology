@@ -1,6 +1,10 @@
 import { phase1Cards } from "./cards.phase1.js";
+import { phase2Cards } from "./cards.phase2.js";
+import { phase3Cards } from "./cards.phase3.js";
 export const allCards = [
     ...phase1Cards,
+    ...phase2Cards,
+    ...phase3Cards,
 ];
 export function getCardsByPhasePool(phasePool) {
     return allCards.filter((card) => card.phase_pool === phasePool);
