@@ -143,38 +143,6 @@ function buildTourSteps(ctx) {
             passive: true,
             allowSkipResults: true,
             advance: "next",
-            primaryLabel: "Tiếp →",
-        },
-        {
-            id: "intro-utility",
-            target: () => {
-                var _a, _b;
-                return (_b = (_a = document
-                    .querySelector('.draft-center-card [data-card-tag="utility"]')) === null || _a === void 0 ? void 0 : _a.closest(".draft-center-card-wrapper")) !== null && _b !== void 0 ? _b : null;
-            },
-            title: "🧰 Thẻ Tiện ích",
-            body: "Thẻ Tiện ích không cho điểm VP nhưng có hiệu ứng khi đặt xuống: 💰 ATM hồi xu · ⚡ Massage hồi thể lực · 🎟️ Voucher giảm chi phí hoặc bỏ qua phạt khoảng cách · 📸 Thuê Thợ Ảnh nhân đôi VP thẻ kế. Dùng đúng lúc — cực kỳ mạnh!",
-            placement: "auto",
-            padding: 4,
-            passive: true,
-            allowSkipResults: true,
-            advance: "next",
-            primaryLabel: "Tiếp →",
-        },
-        {
-            id: "intro-legendary",
-            target: () => {
-                var _a, _b;
-                return (_b = (_a = document
-                    .querySelector('.draft-center-card [data-card-rarity="LEGENDARY"], .draft-center-card [data-card-rarity="legendary"]')) === null || _a === void 0 ? void 0 : _a.closest(".draft-center-card-wrapper")) !== null && _b !== void 0 ? _b : null;
-            },
-            title: "⭐ Thẻ Legendary!",
-            body: "Đây là thẻ HIẾM NHẤT — điểm VP cực cao, đôi khi tốn nhiều xu hoặc thể lực. Nếu thấy thẻ Legendary trong pool, hãy cân nhắc ưu tiên chọn ngay! Ví dụ: Suối Tiên 25VP, Vàm Sát 35VP, Landmark 81 30VP.",
-            placement: "auto",
-            padding: 4,
-            passive: true,
-            allowSkipResults: true,
-            advance: "next",
             primaryLabel: "Đã hiểu! →",
         },
         {
